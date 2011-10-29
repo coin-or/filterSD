@@ -1,0 +1,5 @@
+FilterSD is a package of Fortran 77 subroutines for solving nonlinear programming problems and linearly constrained problems in continuous optimization.
+
+Please see the README.pdf file for instructions on compiling the source code.
+
+This package does not require any Third Party software.
