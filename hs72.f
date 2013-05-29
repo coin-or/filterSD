@@ -14,6 +14,7 @@ c using sparse matrix format
       character cws
 
       common/wsc/kk,ll,kkk,lll,mxws_,mxlws_
+      common/refactorc/mc,mxmc
       common/infoc/rgnorm,vstep,iter,npv,nfn,ngr
 
       data a/4.D0,2.25D0,1.D0,0.25D0,0.16D0,0.36D0,2*0.64D0/
@@ -47,6 +48,7 @@ c using sparse matrix format
       fmin=-ainfty
       rgtol=1.D-5
       mode=0
+      mxmc=25
       mxgr=100
       iprint=1
       nout=0

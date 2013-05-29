@@ -1,9 +1,13 @@
 
 christen this file schurQR.f
-cut here >>>>>>>>>>>>>>>>>
+cut here >>>>>>>>>>>>>>>>>>>
 
 c  Copyright  (C) 2011 Roger Fletcher
-c  Current version dated 26 May 2011
+c  Current version dated 17 January 2012
+
+c  THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS OF THE ECLIPSE PUBLIC
+c  LICENSE ("AGREEMENT"). ANY USE, REPRODUCTION OR DISTRIBUTION OF THE PROGRAM
+c  CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS AGREEMENT
 
 c***************** sparse matrix routines for manipulating L *******************
 
@@ -118,7 +122,7 @@ c  set storage map for sparse factors
 c     print *,'nprof =',nprof
       if(nprof.le.0)then
         write(nout,*)'not enough real workspace in ws'
-	write(nout,*)'you give mxws as',mxws
+        write(nout,*)'you give mxws as',mxws
         write(nout,*)'mxws must be much greater than',mxws-nprof
         ifail=7
         return
@@ -156,6 +160,54 @@ c     print *,'nprof =',nprof
       mq=-1
 c     write(nout,*)'ls',(ls(ij),ij=1,nk)
       if(mode.eq.3)then
+        if(nk.lt.n)then
+c  reset ls from e
+          do j=1,nk
+            i=-ls(j)
+            if(i.gt.0)e(i)=-e(i)
+          enddo
+          j=0
+          nk=nmi
+          do i=1,nmi
+            if(e(i).ne.0.D0)then
+              j=j+1
+              if(e(i).gt.0.D0)then
+                ls(j)=i
+              else
+                ls(j)=-i
+                e(i)=-e(i)
+              endif
+            else
+              ls(nk)=i
+              nk=nk-1
+            endif
+          enddo
+          if(j.ne.n)then
+            write(nout,*)'malfunction in reset sequence in start_up'
+            stop
+          endif
+        endif
+c  reset lr, lc, li, m1 and m2 from ls
+        do i=li+n+1,li+nm
+          ll(i)=0
+        enddo
+        m1=n
+        m2=0
+        do j=1,n
+          i=abs(ls(j))
+          if(i.gt.n)then
+            ll(lc+m1)=i
+            ll(li+i)=m1
+            m1=m1-1
+          else
+            m2=m2+1
+            lii=ll(li+i)
+            lrm2=ll(m2)
+            call iexch(ll(lii),ll(m2))
+            call iexch(ll(li+i),ll(li+lrm2))
+          endif
+        enddo
+        m1=n-m1
         call re_order(n,nm,a,la(1),la(la(0)),ll,ll(lc1),ll(li1),
      *    ll(lm1),ll(lp1),ll(lq1),ll(lr1),ll(ls1),ll(lt1),aa(np1),
      *    nprof,ifail)
@@ -173,32 +225,6 @@ c         write(nout,*)'failure in re_order (1)'
         if(ifail.eq.1)then
           mode=2
           goto1
-        endif
-        if(nk.eq.n)return
-c  reset ls from e
-        do j=1,nk
-          i=-ls(j)
-          if(i.gt.0)e(i)=-e(i)
-        enddo
-        j=0
-        nk=nmi
-        do i=1,nmi
-          if(e(i).ne.0.D0)then
-            j=j+1
-            if(e(i).gt.0.D0)then
-              ls(j)=i
-            else
-              ls(j)=-i
-              e(i)=-e(i)
-            endif
-          else
-            ls(nk)=i
-            nk=nk-1
-          endif
-        enddo
-        if(j.ne.n)then
-          write(nout,*)'malfunction in reset sequence in start_up'
-          stop
         endif
         call EBspace(n,ll(lp1),ll(lq1),ll(ls1),ll,aa(np1),
      *    neb,nprof,ifail)
@@ -294,19 +320,7 @@ c    *  write(nout,*)'error in steepest edge coefficients =',emax
       common/factorc/m1,m2,mp,mq,lastr,irow
       common/noutc/nout
 c     write(nout,*)'refactor'
-      m=nm-n
-      call re_order(n,nm,a,la(1),la(la(0)),ll,ll(lc1),ll(li1),
-     *  ll(lm1),ll(lp1),ll(lq1),ll(lr1),ll(ls1),ll(lt1),aa(np1),
-     *  nprof,ifail)
-      if(ifail.ge.1)then
-c       write(nout,*)'failure in re_order (2)'
-        return
-      endif
-      call re_factor(n,nm,a,la,ll,ll(lc1),ll(li1),ll(lm1),
-     *  ll(lp1),ll(lq1),ll(lr1),ll(ls1),ll(lt1),aa(np1),
-     *  nprof,aa,ifail)
-      if(ifail.eq.7)return
-      call check_L(n,aa,ll(lp1),ifail)
+      ifail=1
       return
       end
 
@@ -327,6 +341,7 @@ c     write(nout,*)'pivot: p,q =',p,q
       call updateSE(p,q,n,nm,a,la,e,aa(nq1),aa(nr1),aa(neb1),
      *  aa(ny1),aa(nz1),aa(ns1),aa(nt1),aa(nu1),aa(nx1),aa,aa(np1),ll,
      *  ll(lc1),ll(li1),ll(lp1),ll(lq1),ll(lm1),ll(lv1),ll(le1),ifail)
+      if(ifail.eq.1)return
       if(mc.eq.mxmc.and.pc.eq.0.and.qr.eq.0)then
 c  reset permutations and refactorize L
         mc1=mc+1
@@ -373,7 +388,8 @@ c       mq=-1
      *    ll(lm1),ll(lp1),ll(lq1),ll(lr1),ll(ls1),ll(lt1),aa(np1),
      *    nprof,ifail)
         if(ifail.ge.1)then
-          print *,'no traversal in re_order (3)'
+c         print *,'no traversal in re_order (3)'
+          ifail=11
           return
           stop
         endif
@@ -543,7 +559,7 @@ c     print 4,'x =',(x(i),i=1,n)
       return
       end
 
-c******** The following routines are internal to sparseL.f **************
+c******** The following routines are internal to schurQR.f **************
 
       subroutine check_L(n,d,p,ifail)
       implicit double precision (a-h,r-z), integer (i-q)
@@ -579,6 +595,7 @@ c     write(nout,*)'m1 =',m1,'   file length =',len,'   total =',len+m1
       common/pqc/pc,qr,lmp
 c     print *,'aqsol  q =',q
       if(q.gt.0)then
+c       print *,'q,n,li(q),m2',q,n,li(q),m2
         if(q.le.n.and.li(q).le.m2.or.q.gt.n.and.li(q).gt.0)then
 c  q is in the starting active set (and hence in row qr of E)
           do qr=1,mc
@@ -1964,7 +1981,7 @@ c     print 4,'u ordered by lr =',(u(i),i=1,n)
         i=lm(j)
         if(e(i).eq.0.D0)then
           print *,'malfunction: e(i)=0.D0, i =',i
-          stop
+          return
         endif
         ei=e(i)
         wi=t(j)*eq

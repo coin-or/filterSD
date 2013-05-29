@@ -3,7 +3,7 @@ cut here >>>>>>>>>>>>>>>>>
 
 c  Copyright (C) 2010 Roger Fletcher
 
-c  Current version dated 18 July 2011
+c  Current version dated 18 April 2013
 
 c  THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS OF THE ECLIPSE PUBLIC
 c  LICENSE ("AGREEMENT"). ANY USE, REPRODUCTION OR DISTRIBUTION OF THE PROGRAM
@@ -83,7 +83,7 @@ c  ws(*) real workspace for gdotx (see below), qlcpd and denseL.f (or schurQR.f)
 c          Set the total number in mxws (see "Common" below).
 c  lws(*) integer workspace for gdotx, qlcpd and denseL.f (or schurQR.f).
 c          Set the total number in mxlws (see "Common" below).
-c        The storage maps for ws and lws are set by the routine stmap below
+c        The storage maps for ws and lws are set by the routine stmapq below
 C  v(maxg) set nv estimates of the eigenvalues of the reduced Hessian of f(x)
 C          (for example from a previous run of qlcpd). Set nv=1 and v(1)=1.D0
 C          in absence of other information. New values of v are left on exit
@@ -118,7 +118,7 @@ c              7 = not enough space in ws or lws
 c              8 = not enough space in lp (increase mlp)
 c              9 = dimension of reduced space too large (increase kmax)
 c             10 = maximum number of unsuccessful restarts taken
-c            >10 = possible use by later sparse matrix codes
+c          >  10 = crash in pivot call
 C  mxgr  maximum number of gradient evaluations
 C  iprint  switch for diagnostic printing (0 = off, 1 = summary,
 C                 2 = scalar information, 3 = verbose)
@@ -223,7 +223,6 @@ c  npv is the number of pivots, and ngr is the number of calls of gdotx.
       irep=0
       ires=0
       mres=0
-      nup=0
       bestf=ainfty
       do i=1,nm
         t=bu(i)-bl(i)
@@ -242,7 +241,7 @@ c  npv is the number of pivots, and ngr is the number of calls of gdotx.
         vmax=max(vmax,bu(i)-bl(i))
       enddo
       if(mode.le.2)then
-        call stmap(n,nm,kmax,maxg)
+        call stmapq(n,nm,kmax,maxg)
         if(mode.eq.0)then
           nk=0
         elseif(mode.eq.1)then
@@ -350,6 +349,8 @@ c  collect active equality c/s
       if(iprint.ge.1)write(nout,*)'FEASIBILITY OBTAINED at level 1'
       n_inf=0
       call setfg2(n,linear,a,la,x,f,g,ws,lws)
+      fbase=f
+      f=0.D0
       ngr=ngr+1
 c     write(nout,4)'g =',(g(i),i=1,n)
       call newg
@@ -358,7 +359,7 @@ c     write(nout,4)'g =',(g(i),i=1,n)
       rgtol=max(rgt0l,gtol)
       ig=0
       if(iprint.ge.1)write(nout,'(''pivots ='',I5,
-     *  ''  level = 1    f ='',E16.8)')npv,f
+     *  ''  level = 1    f ='',E16.8)')npv,fbase
       goto16
 c  start of major iteration
    15 continue
@@ -366,13 +367,13 @@ c  start of major iteration
         if(ninf.eq.0)then
           if(k.gt.0)then
 c           write(nout,'(''pivots ='',I5,
-c    *        ''  level = 1    f ='',E16.8,''   k ='',I4)')npv,f,k
+c    *        ''  level = 1    df ='',E16.8,''   k ='',I4)')npv,f,k
             write(nout,'(''pivots ='',I5,
-     *        ''  level = 1    f ='',E16.8,''   rg ='',E12.4,
+     *        ''  level = 1    df ='',E16.8,''   rg ='',E12.4,
      *        ''  k ='',I4)')npv,f,rgnorm,k
           else
             write(nout,'(''pivots ='',I5,
-     *        ''  level = 1    f ='',E16.8)')npv,f
+     *        ''  level = 1    f ='',E16.8)')npv,fbase+f
           endif
         elseif(phase.eq.0)then
           write(nout,'(''pivots ='',I5,''  level = 1    f ='',
@@ -384,10 +385,10 @@ c    *        ''  level = 1    f ='',E16.8,''   k ='',I4)')npv,f,k
       endif
    16 continue
 c  calculate multipliers
-c     print 4,'gradient =',(g(i),i=1,n)
       do i=1,nm
         w(i)=0.D0
       enddo
+c     write(nout,4)'g =',(g(i),i=1,n)
       call fbsub(n,1,n,a,la,0,g,w,ls,ws(lu1),lws(ll1),.true.)
       call signst(n,r,w,ls)
 c  opposite bound or reset multiplier loop
@@ -400,8 +401,9 @@ c    *    (e(abs(ls(j))),j=1,n)
         if(peq.gt.0.or.k.gt.0)write(nout,1)
      *    '# active equality c/s and free variables = ',peq,k
       endif
-c     call check(n,lp(1),nmi,kmax,g,a,la,x,bl,bu,r,ls,ws(nb1),f,
-c    *  ws,lws,ninf,peq,k,1,p,rp)
+c     if(iphase.le.1)fbase=0.D0
+c     call checkq(n,lp(1),nmi,kmax,g,a,la,x,bl,bu,r,ls,ws(nb1),fbase+f,
+c    *  ws,lws,ninf,peq,k,1,p,rp,linear)
 
    21 continue
       call optest(peq+1,n-k,r,e,ls,rp,pj)
@@ -466,6 +468,7 @@ c  optimal at current level: first tidy up x
           endif
         enddo
         if(ngr.gt.mxgr)then
+          f=fbase+f
           ifail=5
           return
         endif
@@ -479,7 +482,7 @@ c           write(nout,1000)'x variables',(x(i),i=1,n)
         endif
         irep=irep+1
         if(irep.le.nrep.and.iter.gt.mpiv)then
-          if(iprint.ge.1)write(nout,*)'refinement step #',irep
+          if(iprint.ge.1)write(nout,1)'refinement step #',irep
           mode=4
           goto8
         endif
@@ -491,6 +494,7 @@ c           write(nout,1000)'x variables',(x(i),i=1,n)
         endif
         nv=nv0
         ifail=0
+        f=fbase+f
         return
       endif
 
@@ -545,6 +549,7 @@ c         endif
           rgnorm=sqrt(gg)
 c         print 2,'initial rg =',(r(ls(j)),j=n-k+1,n)
           if(k*ngv.gt.kmax*maxg)then
+            f=fbase+f
             ifail=9
             return
           endif
@@ -562,6 +567,7 @@ c       if(abs(gg+rp).gt.1.D-2*max(gg,abs(rp)))then
         plus=.true.
       endif
 c     print 4,'s (or -s if .not.plus) =',(ws(i),i=na1,na+n)
+c     print *,'plus =',plus
 
 c  form At.s and denominators
       call form_Ats(n1,lp(1),n,plus,a,la,ws(na1),w,ls,snorm*tol)
@@ -574,6 +580,7 @@ c  return from degeneracy code
      *    (ls(j),r(abs(ls(j))),j=n1,lp(1))
         write(nout,1000)'denominators',(w(abs(ls(j))),j=n1,lp(1))
       endif
+c     read *,i
 
    40 continue
 c  level 1 ratio tests
@@ -585,8 +592,8 @@ c  level 1 ratio tests
         if(i.le.0)print *,'i.le.0'
         if(i.le.0)stop
         si=ws(na+i)
+        if(si.eq.0.D0)goto41
         t=abs(si)
-        if(t.le.tol)goto41
         if(si.gt.0.D0.eqv.plus)then
           z=bu(i)-x(i)
           if(abs(z).lt.tol)then
@@ -630,7 +637,7 @@ c  level 1 ratio tests
                 qj1=j
               endif
             endif
-            z=(bl(i)-bu(i)+ri-tol)/wi
+            z=((bl(i)-bu(i))+ri-tol)/wi
           endif
           if(z.ge.amax)goto42
           amax=z
@@ -761,6 +768,10 @@ c  Cauchy step infeasible
         ff=f+alpha*(rp+5.D-1*alpha*sgs)
         if(ff.lt.fmin)goto75
         if(ff.ge.f)then
+          if(ires.lt.nres)goto98
+          f=fbase+f
+          if(iprint.ge.1)write(nout,'(''pivots ='',I5,
+     *      ''  level = 1    f ='',E16.8)')npv,f
           ifail=4
           return
         endif
@@ -776,6 +787,10 @@ c       print 4,'new g =',(g(i),i=1,n)
    54 continue
         if(ff.lt.fmin)goto75
         if(ff.ge.f)then
+          if(ires.lt.nres)goto98
+          f=fbase+f
+          if(iprint.ge.1)write(nout,'(''pivots ='',I5,
+     *      ''  level = 1    f ='',E16.8)')npv,f
           ifail=4
           return
         endif
@@ -794,6 +809,7 @@ c       print 4,'new g =',(g(i),i=1,n)
 c       print 4,'new rg =',(w(ls(j)),j=n-k+1,n)
         if(ngv.lt.maxg)ngv=ngv+1
         if(k*ngv.gt.kmax*maxg)then
+          f=fbase+f
           ifail=9
           return
         endif
@@ -937,7 +953,7 @@ c         elseif(f.ge.ff)then
         if(ig.gt.0)then
 c  continue limited memory SD iterations
           if(iprint.ge.1)write(nout,'(''pivots ='',I5,
-     *      ''  level = 1    f ='',E16.8,''   rg ='',E12.4,
+     *      ''  level = 1    df ='',E16.8,''   rg ='',E12.4,
      *      ''  k ='',I4)')npv,f,rgnorm,k
           if(alpha.gt.0.D0)goto20
           print *,'alpha.le.0'
@@ -1015,7 +1031,10 @@ c  pivot interchange
         if(p.eq.0)goto98
         call pivot(p,q,n,nmi,a,la,e,ws(lu1),lws(ll1),ifail,npv)
         if(ifail.ge.1)then
-          if(ifail.ge.2)return
+          if(ifail.ge.2)then
+            ifail=11
+            return
+          endif
           if(iprint.ge.1)write(nout,*)'failure detected in pivot (1)'
           print *,'r(q),w(q),q',r(q),w(q),q
           goto98
@@ -1062,7 +1081,7 @@ c       print 2,'r(p)',r(p)
 c  opposite bound comes active
       if(ninf.eq.0)then
         if(iprint.ge.1)write(nout,'(''pivots ='',I5,
-     *    ''  level = 1    f ='',E16.8)')npv,f
+     *    ''  level = 1    f ='',E16.8)')npv,fbase+f
       elseif(phase.eq.0)then
         if(iprint.ge.1)write(nout,'(''pivots ='',I5,
      *    ''  level = 1    f ='',E16.8,''   ninfb ='',I4)')
@@ -1083,7 +1102,7 @@ c  unbounded solution case
       irep=irep+1
       if(irep.le.nrep.and.iter.gt.mpiv)then
         mode=4
-        if(iprint.ge.1)write(nout,*)
+        if(iprint.ge.1)write(nout,1)
      *    'unbounded solution identified: refinement step #',irep
         goto8
       endif
@@ -1103,6 +1122,7 @@ c  tidy up x
         endif
       enddo
       nv=nv0
+      f=fbase+f
       return
 
 c  recursive code for resolving degeneracy (Wolfe's method)
@@ -1198,8 +1218,8 @@ c  ratio test at higher levels
           if(peq.gt.0.or.k.gt.0)print 1,
      *      '# active equality c/s and free variables = ',peq,k
         endif
-c       call check(n,lp(1),nmi,kmax,g,a,la,x,bl,bu,r,ls,ws(nb1),f,
-c    *    ws,lws,ninf,peq,k,1,p,rp)
+c       call checkq(n,lp(1),nmi,kmax,g,a,la,x,bl,bu,r,ls,ws(nb1),
+c         f,ws,lws,ninf,peq,k,1,p,rp,linear)
         goto30
       endif
       q=abs(ls(qj))
@@ -1254,7 +1274,10 @@ c  potential degeneracy block at level lev
       if(iprint.ge.2)write(nout,*)'replace',p,' by',q
       call pivot(p,q,n,nmi,a,la,e,ws(lu1),lws(ll1),ifail,npv)
       if(ifail.ge.1)then
-        if(ifail.ge.2)return
+        if(ifail.ge.2)then
+          ifail=11
+          return
+        endif
 c       call iexch(ls(pj),ls(qj))
         if(iprint.ge.1)write(nout,*)'failure detected in pivot (4)'
 c       print *,'r(q),w(q),q',r(q),w(q),q
@@ -1283,8 +1306,10 @@ c  restart sequence
       nk=peq
       do j=peq+1,n-k
         i=abs(ls(j))
-        if(i.gt.n)nk=nk+1
-        ls(nk)=ls(j)
+        if(i.gt.n)then
+          nk=nk+1
+          ls(nk)=ls(j)
+        endif
       enddo
       k=n-nk
       mode=2
@@ -1300,104 +1325,7 @@ c1000 format(a/(e18.8,3e19.8))
 c1001 format(a/(i3,1x,e14.8,3(i4,1x,e14.8)))
       end
 
-      block data defaults
-      implicit double precision (a-h,o-z)
-      common/epsc/eps,tol,emin
-      common/repc/sgnf,nrep,npiv,nres
-      common/refactorc/mc,mxmc
-      common/wsc/kk,ll,kkk,lll,mxws,mxlws
-      data  eps,    tol,   emin, sgnf, nrep, npiv, nres, mxmc, kk, ll 
-     * /1111.D-19, 1.D-12, 0.D0, 1.D-8,  2,    3,   2,   500,   0,  0/
-      end
-
-      subroutine optest(jmin,jmax,r,e,ls,rp,pj)
-      implicit double precision (a-h,r-z), integer (i-q)
-      dimension r(*),e(*),ls(*)
-      rp=0.D0
-      do 1 j=jmin,jmax
-        i=abs(ls(j))
-        if(e(i).eq.0.D0)print *,'e(i).eq.0.D0: i =',i
-        ri=r(i)/e(i)
-        if(ri.ge.rp)goto1
-        rp=ri
-        pj=j
-    1 continue
-      return
-      end
-
-      subroutine form_Ats(jmin,jmax,n,plus,a,la,an,w,ls,tol)
-      implicit double precision (a-h,r-z), integer (i-q)
-      dimension a(*),la(*),an(*),w(*),ls(*)
-      logical plus
-c  form At.s and denominators
-      if(plus)then
-        do j=jmin,jmax
-          i=abs(ls(j))
-          if(i.gt.n)then
-            wi=aiscpr(n,a,la,i-n,an,0.D0)
-          else
-            wi=an(i)
-          endif
-          if(wi.ne.0.D0)then
-            if(abs(wi).le.tol)then
-              wi=0.D0
-            elseif(ls(j).ge.0)then
-              wi=-wi
-            endif
-          endif
-          w(i)=wi
-        enddo
-      else
-        do j=jmin,jmax
-          i=abs(ls(j))
-          if(i.gt.n)then
-            wi=aiscpr(n,a,la,i-n,an,0.D0)
-          else
-            wi=an(i)
-          endif
-          if(wi.ne.0.D0)then
-            if(abs(wi).le.tol)then
-              wi=0.D0
-            elseif(ls(j).lt.0)then
-              wi=-wi
-            endif
-          endif
-          w(i)=wi
-        enddo
-      endif
-      return
-      end
-
-      subroutine zprod(k,n,a,la,an,r,w,ls,aa,ll)
-      implicit double precision (a-h,r-z), integer (i-q)
-      dimension a(*),la(*),an(*),r(*),w(*),ls(*),aa(*),ll(*)
-      common/noutc/nout
-      do j=1,n-k
-        w(abs(ls(j)))=0.D0
-      enddo
-      do j=n-k+1,n
-        w(ls(j))=-r(ls(j))
-      enddo
-      call tfbsub(n,a,la,0,w,an,aa,ll,ep,.false.)
-      return
-      end
-
-      subroutine signst(n,r,w,ls)
-      implicit double precision (a-h,o-z)
-      dimension r(*),w(*),ls(*)
-c  transfer with sign change as necessary
-        do j=1,n
-          i=abs(ls(j))
-          if(ls(j).ge.0)then
-            r(i)=w(i)
-          else
-            r(i)=-w(i)
-          endif
-        enddo
-      return
-      end
-
-      subroutine stmap(n,nm,kmax,maxg)
+      subroutine stmapq(n,nm,kmax,maxg)
 c  set storage map for workspace in qlcpd and auxiliary routines
       implicit double precision (a-h,r-z), integer (i-q)
       common/wsc/kk,ll,kkk,lll,mxws,mxlws
@@ -1439,91 +1367,6 @@ c  remaining space for use by denseL.f or schurQR.f
       return
       end
 
-      subroutine warm_start(n,nm,a,la,x,bl,bu,b,ls,aa,ll,an,vstep)
-      implicit double precision (a-h,o-z)
-      dimension a(*),la(*),x(*),bl(*),bu(*),b(*),ls(*),
-     *  aa(*),ll(*),an(*)
-      DOUBLE PRECISION daiscpr
-      common/epsc/eps,tol,emin
-      common/noutc/nout
-      do j=1,n
-        i=abs(ls(j))
-        if(i.le.n)then
-          b(i)=0.D0
-          if(x(i).ge.bu(i)-tol)then
-            x(i)=bu(i)
-            ls(j)=-i
-          else
-            ls(j)=i
-            if(x(i).le.bl(i)+tol)x(i)=bl(i)
-          endif
-        endif
-      enddo
-      do j=1,n
-        i=abs(ls(j))
-        if(i.gt.n)then
-          if(ls(j).ge.0)then
-            b(i)=daiscpr(n,a,la,i-n,x,-bl(i))
-          else
-            b(i)=daiscpr(n,a,la,i-n,x,-bu(i))
-          endif
-        endif
-      enddo
-c     write(nout,1000)'x =',(x(i),i=1,n)
-c     write(nout,1000)'b =',(b(i),i=1,nm)
-c     write(nout,1000)'r =',(b(abs(ls(j))),j=1,n)
-      call tfbsub(n,a,la,0,b,an,aa,ll,ep,.false.)
-c     write(nout,1000)'d =',(an(i),i=1,n)
-      call linf(n,an,vstep,i)
-      if(iprint.ge.1)
-     *  write(nout,*)'infinity norm of vertical step =',vstep
-      do i=1,n
-        x(i)=x(i)-an(i)
-      enddo
-c     write(nout,*)'x =',(x(i),i=1,n)
- 1000 format(a/(e16.5,4e16.5))
-c1001 format(a/(i4,1x,e11.5,4(i4,1x,e11.5)))
-      return
-      end
-
-      subroutine residuals(n,jmin,jmax,a,la,x,bl,bu,r,ls,f,g,ninf)
-      implicit double precision (a-h,r-z), integer (i-q)
-      dimension a(*),la(*),x(*),bl(*),bu(*),r(*),ls(*),g(*)
-      common/epsc/eps,tol,emin
-      DOUBLE PRECISION daiscpr,z
-      f=0.D0
-      ninf=0
-      do j=jmin,jmax
-        i=abs(ls(j))
-        if(i.gt.n)then
-          z=daiscpr(n,a,la,i-n,x,0.D0)
-        else
-          z=dble(x(i))
-        endif
-        ri=z-dble(bl(i))
-        ro=dble(bu(i))-z
-        if(ri.le.ro)then
-          ls(j)=i
-        else
-          ri=ro
-          ls(j)=-i
-        endif
-        if(abs(ri).le.tol)then
-          ri=0.D0
-        elseif(ri.lt.0.D0)then
-          f=f-ri
-          ninf=ninf+1
-          if(i.gt.n)then
-            call saipy(-sign(1.D0,dble(ls(j))),a,la,i-n,g,n)
-          else
-            g(i)=g(i)-sign(1.D0,dble(ls(j)))
-          endif
-        endif
-        r(i)=ri
-      enddo
-      return
-      end
-
       subroutine setfg2(n,linear,a,la,x,f,g,ws,lws)
       implicit double precision (a-h,o-z)
       logical linear
@@ -1540,225 +1383,21 @@ c1001 format(a/(i4,1x,e11.5,4(i4,1x,e11.5)))
         call saipy(1.D0,a,la,0,g,n)
         f=5.D-1*scpr(aiscpr(n,a,la,0,x,0.D0),g,x,n)
       endif
-      return
-      end
-
-      subroutine store_rg(k,ig,G,r,ls)
-      implicit double precision (a-h,o-z)
-      dimension G(k,*),r(*),ls(*)
-      do j=1,k
-        G(j,ig)=r(ls(j))
-      enddo
-      return
-      end
-
-      subroutine trid(d,e,n)
-      implicit double precision (a-h,o-z)
-      dimension d(*),e(*)
-c  QL method for eigenvalues of a tridiagonal matrix.  d(i) i=1,..,n
-c  is diagonal and e(i) i=1,..,n-1 is subdiagonal (storage for dummy e(n)
-c  must be available). Eigenvalues returned in d
-c  This routine is adapted from the EISPAK subroutine imtq11.
-      if(n.eq.1)return
-      e(n)=0.D0
-      do 15 l=1,n
-      iter=0
-    1 continue
-      do 12 m=l,n-1
-      dd=abs(d(m))+abs(d(m+1))
-      if(abs(e(m))+dd.eq.dd)goto2
-   12 continue
-      m=n
-    2 continue
-      if(m.eq.l.or.iter.eq.30)goto15
-      iter=iter+1
-      g=(d(l+1)-d(l))*5.D-1/e(l)
-      r=sqrt(g**2+1.D0)
-      g=d(m)-d(l)+e(l)/(g+sign(r,g))
-      s=1.D0
-      c=1.D0
-      p=0.D0
-      do 14 i=m-1,l,-1
-      f=s*e(i)
-      b=c*e(i)
-      if(abs(f).ge.abs(g))then
-        c=g/f
-        r=sqrt(c**2+1.D0)
-        e(i+1)=f*r
-        s=1.D0/r
-        c=c*s
-      else
-        s=f/g
-        r=sqrt(s**2+1.D0)
-        e(i+1)=g*r
-        c=1.D0/r
-        s=s*c
-      endif
-      g=d(i+1)-p
-      r=(d(i)-g)*s+2.*c*b
-      p=s*r
-      d(i+1)=g+p
-      g=c*r-b
-   14 continue
-      d(l)=d(l)-p
-      e(l)=g
-      e(m)=0.D0
-      goto1
-   15 continue
-      return
-      end
-
-      subroutine formR(nv,k,ig,maxg,a,b,c,d,e,G,R)
-      implicit double precision (a-h,o-z)
-      dimension a(*),b(*),c(*),d(*),e(*),G(k,*),R(*)
-c     print *,'G and ig',ig
-c     do i=1,k
-c       print 5,(G(i,j),j=1,6)
-c     enddo
-c     print 4,'a =',(a(i),i=1,6)
-c     print 4,'b =',(b(i),i=1,6)
-c     print 4,'c =',(c(i),i=1,6)
-   10 ii=ig-nv
-      if(ii.lt.0)ii=ii+maxg
-      do i=1,nv
-        ii=ii+1
-        if(ii.gt.maxg)ii=1
-        e(i)=a(ii)
-        nvi=nv-i+1
-        nvi1=nvi+1
-        d(1)=b(ii)
-        d(2)=c(ii)
-        jj=ii+1
-        if(jj.gt.maxg)jj=1
-        do j=3,nvi1
-          jj=jj+1
-          if(jj.gt.maxg)jj=1
-          d(j)=scpr(0.D0,G(1,jj),G(1,ii),k)
-        enddo
-        ij=i
-        do j=1,i-1
-          call mysaxpy(-R(ij),R(ij),d,nvi1)
-          ij=ij+maxg-j
-        enddo
-        if(d(1).le.0.D0)then
-c         print *,'R is singular'
-          nv=i-1
-          goto10
-        endif
-        t=sqrt(d(1))
-        R(ij)=t
-        do j=1,nvi
-          R(ij+j)=d(j+1)/t
-        enddo
-c       print 4,'row of R =',(R(ij+j),j=0,nvi)
-      enddo
-c     print 4,'R matrix',(R(j),j=1,nv+1)
-c     ii=maxg
-c     do i=1,nv-1
-c       print 5,(0.D0,j=1,i),(R(ii+j),j=1,nv-i+1)
-c       ii=ii+maxg-i
-c     enddo
-      return
-    2 format(A,5E13.5)
-    4 format(A/(6E13.5))
-    5 format((6E13.5))
-      end
-
-      subroutine formT(n,nmax,R,d,e)
-      implicit double precision (a-h,o-z)
-      dimension R(*),d(*),e(*)
-c  forms the tridiagonal matrix  T = [R | Qt.gp].S.R^(-1) in d and e
-      t=e(1)*R(2)/R(1)
-      d(1)=e(1)-t
-      ir=1
-      irp=nmax+1
-      do i=2,n
-        im=i-1
-        e(im)=-e(im)*R(irp)/R(ir)
-        ir=irp
-        irp=irp+nmax-im
-        dii=t
-        t=e(i)*R(ir+1)/R(ir)
-        d(i)=dii+e(i)-t
-      enddo
-      return
-      end
-
-      subroutine insort(nv,v)
-      implicit double precision (a-h,o-z)
-      dimension v(*)
-c  insertion sort into ascending order
-      do i=2,nv
-        t=v(i)
-        do j=i-1,1,-1
-          if(v(j).gt.t)then
-            v(j+1)=v(j)
-          else
-            v(j+1)=t
-            goto10
-          endif
-        enddo
-        v(1)=t
-   10   continue
-      enddo
-      return
-      end
-
-      subroutine checkT(n,nmax,R,a,d)
-      implicit double precision (a-h,o-z)
-      dimension R(*),a(*),d(*)
-      dimension T(10,10)
-      if(n.gt.9)print *,'Increase dimension of T'
-      if(n.gt.9)stop
-      do j=1,n+1
-        T(1,j)=R(j)
-      enddo
-      ii=nmax
-      do i=1,n-1
-        do j=1,i
-          T(i+1,j)=0.D0
-        enddo
-        do j=1,n-i+1
-          T(i+1,j+i)=R(ii+j)
-        enddo
-        ii=ii+nmax-i
-      enddo
-c     print 4,'R matrix'
-c     do i=1,n
-c       print 5,(T(i,j),j=1,n+1)
-c     enddo
-c     print 2,'a =',(a(i),i=1,n)
-      do i=1,n
-        call mysaxpy(-1.D0,T(1,i+1),T(1,i),n)
-        do j=1,n
-          T(j,i)=T(j,i)*a(i)
-        enddo
-      enddo
-c     print 4,'R*J matrix'
-c     do i=1,n
-c       print 5,(T(i,j),j=1,n)
-c     enddo
-      print 4,'T matrix'
-      do i=1,n
-        do j=1,n
-          d(j)=T(i,j)
-        enddo
-        call rtsol(n,nn,nmax,R,d)
-        print 5,(d(j),j=1,n)
-      enddo
-      return
-    2 format(A,6E15.7)
+    1 format(A,15I4)
+    2 format(A,5E15.7)
+    3 format(A/(20I4))
     4 format(A/(5E15.7))
-    5 format((5E15.7))
+      return
       end
 
-      subroutine check(n,nm,nmi,kmax,g,a,la,x,bl,bu,r,ls,an,f,
-     *  ws,lws,ninf,peq,k,lev,p,alp2)
+      subroutine checkq(n,nm,nmi,kmax,g,a,la,x,bl,bu,r,ls,an,f,
+     *  ws,lws,ninf,peq,k,lev,p,alp2,linear)
       implicit double precision (a-h,r-z), integer (i-q)
       dimension g(*),a(*),la(*),x(*),bl(*),bu(*),r(*),ls(*),
      *  an(*),ws(*),lws(*)
       common/noutc/nout
       common/epsc/eps,tol,emin
+      logical linear
 c     if(lev.eq.2)then
 c       do i=1,n
 c         an(i)=g(i)
@@ -1770,7 +1409,7 @@ c         an(i)=an(i)-e
 c       else
 c         call saipy(-e,a,la,i-n,an,n)
 c       endif
-c       goto1
+c       goto10
 c     endif
       j=nmi*(nmi+1)/2
       do i=1,nmi
@@ -1843,7 +1482,7 @@ c     if(e.gt.tol)stop
         if(e.gt.tol*max(1.D0,abs(f)))print 4,'x =',(x(j),j=1,n)
         if(e.gt.tol*max(1.D0,abs(f)))stop
       endif
-    1 continue
+   10 continue
       e=0.D0
       do j=1,n
 c       write(nout,*)'an =',(an(i),i=1,n)
@@ -1888,9 +1527,11 @@ c     if(e.gt.1.D-6)print 4,'x =',(x(i),i=1,n)
 c     write(nout,*)'KT condition error = ',e,je,ie,gnm
       if(e.gt.gnm*tol)write(nout,*)'KT condition error = ',e,je,ie,gnm
 c     if(e.gt.gnm*tol)write(nout,4)'KT cond_n errors = ',(an(i),i=1,n)
-c     if(e.gt.gnm*tol)stop
+      if(e.gt.gnm*tol)stop
 c     if(e.gt.1.D-4)stop
+    1 format(A,15I4)
     2 format(A,5E15.7)
-    4 format(A/(5E15.6))
+    3 format(A/(20I4))
+    4 format(A/(5E15.7))
       return
       end

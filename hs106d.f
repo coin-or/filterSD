@@ -67,6 +67,8 @@ c  user workspace
       ubd=1.D5
       htol=1.D-6
       rgtol=1.D-4
+      v(1)=1.D0
+      nv=1
 
 c  code to check gradients
 c     call checkd(n,m,x,al,ws,lws,maxa,maxla,maxu,maxiu,

@@ -70,6 +70,13 @@ c     print 4,'x =',(x(i),i=1,n)
       call cfn(n,m,x,f,m,c)
 c     print *,'f =',f
 c     print 4,'c =',(c(i),i=1,m)
+c     do j=1,m
+c       if(c(j)-c(j).ne.0.D0)then
+c         print 4,'x =',(x(i),i=1,n)
+c         print 4,'c =',(c(i),i=1,m)
+c         stop
+c       endif
+c     enddo
     4 format(A/(5E15.7))
       return
       end

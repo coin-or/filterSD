@@ -15,6 +15,7 @@ christen this file hs106.f
 
       common/defaultc/ainfty,ubd,mlp,mxf
       common/wsc/kk,ll,kkk,lll,mxws_,mxlws_
+      common/refactorc/mc,mxmc
       common/statsc/dnorm,h,hJt,hJ,ipeq,k,itn,nft,ngt
       common/ngrc/mxgr
 
@@ -56,10 +57,14 @@ c  initializing second copy of a(*)
 c  user information passed to subroutines
       ws(1)=t
 
+      nv=1
+      v(1)=1.D0
+
       fmin=-ainfty
       maxit=60
       iprint=1
       nout=0
+      mxmc=25
       mxgr=100
       rho=1.D2
       ubd=1.D5
