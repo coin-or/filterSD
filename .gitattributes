@@ -1,4 +1,8 @@
 * text=auto !eol
+/AUTHORS -text
+/INSTALL -text
+/LICENSE -text
+/README -text
 /README.pdf -text
 /checkd.f -text
 /checkg.f -text
