@@ -1,0 +1,27 @@
+* text=auto !eol
+/AUTHORS -text
+/INSTALL -text
+/LICENSE -text
+/README -text
+/README.pdf -text
+/checkd.f -text
+/checkg.f -text
+/denseA.f -text
+/denseL.f -text
+/driver.f -text
+/filterSD.f -text
+/filterSD.pdf -text
+/glcpd.f -text
+/glcpd.pdf -text
+/hs106.f -text
+/hs106d.f -text
+/hs72.f -text
+/hs72d.f -text
+/l1sold.f -text
+/qlcpd.f -text
+/schurQR.f -text
+/shared.f -text
+/sparseA.f -text
+/sparseL.f -text
+/user.f -text
+/util.f -text
