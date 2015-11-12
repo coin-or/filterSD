@@ -588,6 +588,7 @@ c     write(nout,*)'m1 =',m1,'   file length =',len,'   total =',len+m1
       subroutine aqsol(n,a,la,q,Q_,R,EB,z,t,u,x,d,ws,
      *  lr,lc,li,lv,le,pp,qq)
       implicit double precision (a-h,r-z), integer (i-q)
+      double precision Q_
       dimension a(*),la(*),Q_(*),R(*),EB(*),z(*),t(*),u(*),x(*),
      *  d(*),ws(*),lr(*),lc(*),li(*),lv(*),le(*),pp(*),qq(*)
       common/factorc/m1,m2,mp,mq,lastr,irow
@@ -712,6 +713,7 @@ c     print *,'tn =',(tn(i),i=1,n)
       subroutine eptsol(n,a,la,p,b,Q_,R,EB,y,s,u,x,d,ws,
      *  lr,lc,li,lv,le,pp,qq,ep)
       implicit double precision (a-h,r-z), integer (i-q)
+      double precision Q_
       dimension a(*),la(*),b(*),Q_(*),R(*),EB(*),y(*),s(*),u(*),x(*),
      *  d(*),ws(*),lr(*),lc(*),li(*),lv(*),le(*),pp(*),qq(*)
       common/epsc/eps,tol,emin
