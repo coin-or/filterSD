@@ -1,4 +1,20 @@
 FilterSD is a package of Fortran 77 subroutines for solving nonlinear programming problems and linearly constrained problems in continuous optimization.
+It is released as open source code under the Eclipse Public License (EPL).
+The code has been written by Roger Fletcher.
+The COIN-OR project leader is Frank E. Curtis (http://coral.ie.lehigh.edu/~frankecurtis).
+
+The NLP solver filterSD aims to find a solution of the NLP problem
+
+  min  f(x)
+  s.t. l <= (x,c(x)) <= u
+
+where the objective function f(x): R^n --> R and the constraint function c(x): R^n --> R^m are continuously differentiable at points that satisfy the bounds on x.
+The code calls the LCP solver glcpd or the QP solver qlcpd.  (The choice between these two solvers can be specified by the user.)
+These solvers aim to find a solution of a linearly constrained problem of the form
+
+  min  f(x)
+  s.t. l <= (x,A^Tx) <= u
+
 
 Please see the README.pdf file for instructions on compiling the source code.
 
